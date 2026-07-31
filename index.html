@@ -104,16 +104,6 @@
       <div class="tab active" onclick="showTab('profile')">Conservation profile</div>
       <div class="tab" onclick="showTab('peptides')">Peptide candidates</div>
       <div class="tab" onclick="showTab('msa')">MSA viewer</div>
-      <div class="tab" onclick="showTab('recs')">🎯 Antibody recommendations</div>
-    </div>
-    <div id="panel-recs" class="panel" style="max-width:800px;">
-      <div class="info-box" style="margin-bottom:16px;">
-        <h4 style="margin-bottom:8px">Optimal antibody strategy per class</h4>
-        <p style="font-size:0.82rem;color:#555">Based on exhaustive optimisation: maximise min-score across all groups.
-        N-terminal tail peptides only (surface-exposed, recommended for ChIP-seq).
-        Score = within-group conservation (1 = perfectly conserved).</p>
-      </div>
-      <div id="recs-content"></div>
     </div>
     <div id="panel-profile" class="panel active">
       <div id="window-info"></div>
@@ -176,44 +166,12 @@ let activeCls = "Aves";
 
 function showTab(name) {
   document.querySelectorAll(".tab").forEach((t,i) => {
-    const panels = ["profile","peptides","msa","recs"];
+    const panels = ["profile","peptides","msa"];
     t.classList.toggle("active", panels[i]===name);
   });
   document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
   document.getElementById("panel-"+name).classList.add("active");
   if (name==="msa") renderMSA();
-  if (name==="recs") renderRecs();
-}
-
-function renderRecs() {
-  const recs = DATA.split_recs || {};
-  const cont = document.getElementById("recs-content");
-  cont.innerHTML = "";
-  Object.entries(recs).forEach(([cls, info]) => {
-    const color = ({Aves:"#1565C0",Mammalia:"#C62828",Actinopterygii:"#2E7D32"})[cls]||"#333";
-    let html = `<div style="border:2px solid ${color};border-radius:8px;padding:14px;margin-bottom:16px;">
-      <h3 style="color:${color};margin-bottom:4px">${cls}</h3>
-      <p style="font-size:0.8rem;color:#555;margin-bottom:10px;font-style:italic">${info.strategy}</p>`;
-    info.antibodies.forEach((ab,i) => {
-      const badge = info.antibodies.length>1
-        ? `<span style="background:${color};color:#fff;border-radius:4px;padding:1px 8px;font-size:0.75rem;margin-right:8px">Ab ${String.fromCharCode(65+i)}</span>`
-        : `<span style="background:${color};color:#fff;border-radius:4px;padding:1px 8px;font-size:0.75rem;margin-right:8px">Single Ab</span>`;
-      const colored = [...ab.peptide].map(aa =>
-        `<span style="color:${CHEM[aa]||"#333"};font-weight:bold;font-size:1.05em">${aa}</span>`).join("");
-      html += `<div style="background:#f8f9fa;border-radius:6px;padding:10px;margin-bottom:8px;">
-        ${badge}<strong>${ab.label}</strong>
-        <div style="margin-top:6px;font-family:monospace;font-size:1.1rem;letter-spacing:.1em">
-          ${colored}
-          <span style="margin-left:12px;font-size:0.8rem;color:#555;font-family:sans-serif">
-            conservation score: <strong>${ab.score.toFixed(3)}</strong>
-          </span>
-        </div>
-        <div style="font-size:0.75rem;color:#666;margin-top:4px">${ab.species}</div>
-      </div>`;
-    });
-    html += `</div>`;
-    cont.innerHTML += html;
-  });
 }
 
 // sidebar buttons
@@ -285,16 +243,9 @@ function renderProfile() {
 
   const shapes = [];
 
-  // top-3 peptide windows
-  if (d.peptides && d.peptides.length > 0) {
-    d.peptides.slice(0,3).forEach((p,i) => {
-      shapes.push({
-        type:"rect", xref:"x", yref:"paper", x0:p.msa_start, x1:p.msa_end,
-        y0:0, y1:1, fillcolor:"rgba(255,224,0,0.25)", line:{width:0},
-        layer:"below",
-      });
-    });
-  }
+  // N-tail peptide windows (in joint-MSA coords via ntail col stats)
+  // ntail uses its own alignment coords — shade the known sig positions instead
+  // (N-tail region is before αN = helix col 56, already indicated by helix track)
 
   // known CENH3-specific positions
   if (document.getElementById("show-known").checked) {
@@ -436,17 +387,17 @@ function renderPeptides() {
   });
 }
 
+// αN helix start in joint trimmed MSA (col 56) — everything before = N-terminal tail
+const AN_START = 56;
+
 // ── MSA viewer ────────────────────────────────────────────────────────────────
 function renderMSA() {
-  const d      = DATA.classes[activeCls];
-  const topPep = (d?.peptides || [])[0] || null;
-  const start  = topPep ? topPep.msa_start : 0;
-  const end    = topPep ? topPep.msa_end   : Math.min(30, DATA.n_cols-1);
+  const d = DATA.classes[activeCls];
 
   document.getElementById("msa-info").innerHTML =
     `<strong>${activeCls}</strong> · ${DATA.n_cols} trimmed columns · ` +
-    (topPep ? `<span style="background:#ffe082;padding:1px 5px;border-radius:3px">
-      Yellow = top peptide (${start}–${end})</span>` : "") +
+    `<span style="background:#ffe082;padding:1px 5px;border-radius:3px">
+      Yellow = N-terminal tail (cols 0–${AN_START-1})</span>` +
     `<span style="margin-left:12px;font-size:0.75rem;color:#555">
       <strong style="color:#333">bold</strong> = CENH3 &nbsp;
       <span style="color:#888">grey</span> = H3</span>`;
@@ -461,7 +412,7 @@ function renderMSA() {
     hdr.style.cssText = `background:color-mix(in srgb,${d.color} 10%,white);
                           border-top:2px solid ${d.color};padding:2px 0;margin-bottom:2px;`;
     hdr.innerHTML = `<span class="msa-label" style="font-weight:700;color:${d.color}">${activeCls} consensus</span>` +
-      seqToHtml((d.consensus_aa||[]).join(""), start, end, true);
+      seqToHtml((d.consensus_aa||[]).join(""), 0, AN_START-1, true);
     cont.appendChild(hdr);
   }
 
@@ -476,7 +427,7 @@ function renderMSA() {
       : `<span style="font-size:0.65rem;background:#888;color:#fff;border-radius:3px;padding:0 3px;margin-right:3px">H3</span>`;
     row.innerHTML =
       `<span class="msa-label" title="${sp.id}">${tag}${sp.species}</span>` +
-      seqToHtml(sp.seq, start, end, isCenpa);
+      seqToHtml(sp.seq, 0, AN_START-1, isCenpa);
     cont.appendChild(row);
   });
 }
