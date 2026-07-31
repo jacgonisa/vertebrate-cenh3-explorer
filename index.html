@@ -442,6 +442,15 @@ function renderMSA() {
     cont.appendChild(hdr);
   }
 
+  // build species→antibody peptide map from min_cover
+  const mc = (DATA.min_cover || {})[activeCls] || [];
+  const spToPep = {};
+  mc.forEach(ab => {
+    (ab.species||"").split(";").forEach(s => {
+      spToPep[s.trim()] = ab.peptide;
+    });
+  });
+
   // all rows: CENPA bold/colored, H3 lighter grey
   (d?.species || []).forEach(sp => {
     const isCenpa = sp.type === "CENPA";
@@ -451,20 +460,41 @@ function renderMSA() {
     const tag = isCenpa
       ? `<span style="font-size:0.65rem;background:#C62828;color:#fff;border-radius:3px;padding:0 3px;margin-right:3px">C</span>`
       : `<span style="font-size:0.65rem;background:#888;color:#fff;border-radius:3px;padding:0 3px;margin-right:3px">H3</span>`;
+    // find underline range: exact peptide position in this sequence
+    const underlineCols = isCenpa ? findPeptideInSeq(sp.seq, spToPep[sp.species]) : null;
     row.innerHTML =
       `<span class="msa-label" title="${sp.id}">${tag}${sp.species}</span>` +
-      seqToHtml(sp.seq, hlStart, hlEnd, isCenpa);
+      seqToHtml(sp.seq, hlStart, hlEnd, isCenpa, underlineCols);
     cont.appendChild(row);
   });
 }
 
-function seqToHtml(seq, hlStart, hlEnd, bold=false) {
+// Find where an exact peptide string sits in an aligned sequence.
+// Returns [start_col, end_col] in alignment coords, or null.
+function findPeptideInSeq(alignedSeq, peptide) {
+  if (!peptide || !alignedSeq) return null;
+  // build map: ungapped position → alignment column
+  const colMap = [];
+  for (let i = 0; i < alignedSeq.length; i++) {
+    if (alignedSeq[i] !== "-") colMap.push(i);
+  }
+  const ungapped = colMap.map(i => alignedSeq[i]).join("");
+  const pos = ungapped.indexOf(peptide);
+  if (pos === -1) return null;
+  return [colMap[pos], colMap[pos + peptide.length - 1]];
+}
+
+function seqToHtml(seq, hlStart, hlEnd, bold=false, underlineCols=null) {
+  const uStart = underlineCols ? underlineCols[0] : -1;
+  const uEnd   = underlineCols ? underlineCols[1] : -1;
   const chars = [...seq];
   const spans = chars.map((aa, i) => {
     const bg  = (i >= hlStart && i <= hlEnd) ? "background:#ffe082;" : "";
     const col = aa==="-" ? "#ccc" : (CHEM[aa] || "#333");
     const fw  = bold ? "font-weight:700;" : "color:#999;";
-    return `<span style="${bg}${fw}color:${col}">${aa}</span>`;
+    const ul  = (i >= uStart && i <= uEnd && uStart >= 0)
+      ? "text-decoration:underline;text-underline-offset:3px;text-decoration-color:#1565C0;text-decoration-thickness:2px;" : "";
+    return `<span style="${bg}${fw}color:${col}${ul}">${aa}</span>`;
   });
   return `<span class="msa-seq">${spans.join("")}</span>`;
 }
