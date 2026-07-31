@@ -328,46 +328,41 @@ function renderPeptides() {
 
 // ── MSA viewer ────────────────────────────────────────────────────────────────
 function renderMSA() {
-  const d = DATA.classes[activeCls];
-  const species = d.species || [];
-  const peps = d.peptides || [];
-  const topPep = peps.length > 0 ? peps[0] : null;
-  const start = topPep ? topPep.msa_start : 0;
-  const end   = topPep ? topPep.msa_end   : Math.min(30, DATA.n_cols-1);
+  // highlight window from the active class top peptide
+  const topPep = (DATA.classes[activeCls]?.peptides || [])[0] || null;
+  const start  = topPep ? topPep.msa_start : 0;
+  const end    = topPep ? topPep.msa_end   : Math.min(30, DATA.n_cols-1);
 
   document.getElementById("msa-info").innerHTML =
-    `<strong>${activeCls} MSA</strong> · Showing all ${DATA.n_cols} trimmed columns · ` +
-    (topPep ? `<span style="background:#ffe082;padding:1px 5px;border-radius:3px">Yellow = top peptide window (${start}–${end})</span>` : "");
+    `All vertebrate CENH3 · ${DATA.n_cols} trimmed columns · ` +
+    (topPep ? `<span style="background:#ffe082;padding:1px 5px;border-radius:3px">Yellow = ${activeCls} top peptide (${start}–${end})</span>` : "");
 
   const cont = document.getElementById("msa-container");
   cont.innerHTML = "";
 
-  // consensus row (H3)
-  const h3row = document.createElement("div");
-  h3row.className = "msa-row";
-  h3row.innerHTML = `<span class="msa-label" title="H3 consensus">H3 consensus</span>` +
-    seqToHtml(DATA.h3_consensus, start, end);
-  cont.appendChild(h3row);
+  // show all classes, each with a coloured header + per-species rows
+  const showCls = ["Aves","Mammalia","Actinopterygii","Reptilia"];
+  showCls.forEach(cls => {
+    const d = DATA.classes[cls];
+    if (!d || !d.species || d.species.length === 0) return;
 
-  // class consensus
-  const cls_cons = d.consensus_aa || [];
-  const consRow = document.createElement("div");
-  consRow.className = "msa-row";
-  consRow.innerHTML = `<span class="msa-label" title="${activeCls} consensus">${activeCls} consensus</span>` +
-    seqToHtml(cls_cons.join(""), start, end);
-  cont.appendChild(consRow);
+    // class header row (consensus)
+    const hdr = document.createElement("div");
+    hdr.className = "msa-row";
+    hdr.style.cssText = `background:color-mix(in srgb,${d.color} 10%,white);
+                          border-top:2px solid ${d.color};margin-top:6px;padding:2px 0;`;
+    hdr.innerHTML = `<span class="msa-label" style="font-weight:700;color:${d.color}">${cls} consensus</span>` +
+      seqToHtml((d.consensus_aa||[]).join(""), start, end);
+    cont.appendChild(hdr);
 
-  // separator
-  cont.appendChild(Object.assign(document.createElement("div"),
-    {style:"height:4px;border-bottom:1px solid #dee2e6;margin:4px 0"}));
-
-  // individual species
-  species.forEach(sp => {
-    const row = document.createElement("div");
-    row.className = "msa-row";
-    row.innerHTML = `<span class="msa-label" title="${sp.id}">${sp.species}</span>` +
-      seqToHtml(sp.seq, start, end);
-    cont.appendChild(row);
+    // individual species
+    d.species.forEach(sp => {
+      const row = document.createElement("div");
+      row.className = "msa-row";
+      row.innerHTML = `<span class="msa-label" title="${sp.id}">${sp.species}</span>` +
+        seqToHtml(sp.seq, start, end);
+      cont.appendChild(row);
+    });
   });
 }
 
