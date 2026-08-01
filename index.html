@@ -242,15 +242,7 @@ function renderProfile() {
 
   const shapes = [];
 
-  // N-tail top peptide window mapped to joint-MSA coords
-  const nt = d.ntail || {};
-  if (nt.joint_msa_start != null && nt.joint_msa_end != null) {
-    shapes.push({
-      type:"rect", xref:"x", yref:"paper",
-      x0:nt.joint_msa_start, x1:nt.joint_msa_end,
-      y0:0, y1:1, fillcolor:"rgba(255,224,0,0.30)", line:{width:0}, layer:"below",
-    });
-  }
+
 
   // known CENH3-specific positions
   if (document.getElementById("show-known").checked) {
